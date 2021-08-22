@@ -1,4 +1,4 @@
-# seldon-core-on-aws-quickstart-tutorial
+# Quickstart on AWS
 
 This tutorial shows to run ML model serving at scale on AWS using Seldon Core.
 
