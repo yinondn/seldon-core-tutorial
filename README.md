@@ -9,7 +9,9 @@ To install Seldon Core you'll need a Kubernetes cluster version equal or higher 
 Follow the latest [AWS EKS docs](https://docs.aws.amazon.com/eks/latest/userguide/create-cluster.html) to find the setup option that best suits your needs.
 
 Below is an example of how to create EKS cluster using `eksctl`:
-1. [Install eksctl](https://docs.aws.amazon.com/eks/latest/userguide/eksctl.html).
+4. [Install AWS CLI version 2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
+6. [Configure the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
+1. [Install eksctl](https://docs.aws.amazon.com/eks/latest/userguide/eksctl.html)
 2. Run in terminal:
     ```bash
     eksctl create cluster \
@@ -18,19 +20,17 @@ Below is an example of how to create EKS cluster using `eksctl`:
     --region us-east-2 \
     --nodegroup-name linux-nodes \
     --node-type t3.medium \
-    --nodes 1 \
-    --nodes-min 1 \
-    --nodes-max 1 \
+    --nodes 2 \
+    --nodes-min 2 \
+    --nodes-max 2 \
     --managed
     ```
-3. [Install kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl).
+3. [Install kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
     
     For example, to install on macOS using Homebrew:
     ```bash
     brew install kubectl
     ```
-4. [Install AWS CLI version 2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html).
-6. [Configuring the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
 7. Configure kubectl:
    ```bash
    aws eks --region us-east-2 update-kubeconfig --name eks-model-serving
@@ -60,15 +60,22 @@ helm repo add datawire https://www.getambassador.io
 kubectl create namespace ambassador
 helm install ambassador --namespace ambassador datawire/ambassador
 ```
-Finish the installation by running the following command: edgectl install. [Edge Control](https://www.getambassador.io/docs/edge-stack/latest/topics/using/edgectl/edge-control) (edgectl) automatically configures TLS for your instance and provisions a domain name for your Ambassador Edge Stack. This is not necessary if you already have a domain name and certificates.  (optional)
+Finish the installation by running the following command: 
 ```bash
 edgectl install
 ```
+[Edge Control](https://www.getambassador.io/docs/edge-stack/latest/topics/using/edgectl/edge-control) (edgectl) automatically configures TLS for your instance and provisions a domain name for your Ambassador Edge Stack. This is not necessary if you already have a domain name and certificates.
 
-Finally get the IP of the load balancer ambassador just created - you will use it later to send requests to your models:
+The output will contain the created DNS, for example:
 ```bash
-export LOAD_BALANCER_IP=$(kubectl get svc --namespace ambassador ambassador -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-echo $LOAD_BALANCER_IP
+Congratulations! You've successfully installed the Ambassador Edge Stack in
+your Kubernetes cluster. You can find it at your custom URL:
+https://great-shtern-3456.edgestack.me/
+```
+You can get the hosts name by getting the custom `host` resource from the kubernetes cluster. Save it in a variable for a later use:
+```bash
+export LOAD_BALANCER_URL=$(kubectl get host -n ambassador -o jsonpath='{.items[0].spec.hostname}')
+echo $LOAD_BALANCER_URL
 ```
 
 ## Installing Seldon Core
@@ -116,7 +123,7 @@ END
    
    Which in our example resolves to:
    ```bash
-   echo https://$LOAD_BALANCER_IP/seldon/my-models/iris-model/api/v1.0/doc/
+   echo https://$LOAD_BALANCER_URL/seldon/my-models/iris-model/api/v1.0/doc/
    ```
 
     You can use the OpenAPI UI to send requests to your model and get prediction results. Try it out with this data:
@@ -126,8 +133,67 @@ END
 
     Alternatively you can use any other client, for example `curl` or `Postman`, as well as [Seldon Python Client](https://docs.seldon.io/projects/seldon-core/en/latest/python/seldon_client.html):
     ```bash
-    curl -X POST https://<ingress>/seldon/seldon/iris-model/api/v1.0/predictions \
+    curl -X POST https://$LOAD_BALANCER_URL/seldon/my-models/iris-model/api/v1.0/predictions \
     -H 'Content-Type: application/json' \
     -d '{ "data": { "ndarray": [[1,2,3,4]] } }'
     ```
     Note: If you haven't set up a SSL certificate properly (which we won't in the scope of this tutorial), you will need to ignore SSL errors in your clients. For example in curl add `-k` argument.
+
+## Scaling
+In this section I will show multiple ways to handle increasing scale.
+In order to measure the effect of scaling change we will run a load test using a pythonic tool called `locust`
+1. Create and activate a virtual environment.
+    
+    For example using virtualenvwrapper:
+    ```bash
+    mkvirtualenv seldon-core-quickstart-tutorial
+    workon seldon-core-quickstart-tutorial
+    ```
+2. Install locust:
+    ```bash
+    pip install locust
+    ```
+3. Run locust:
+   ```bash
+   locust
+   ```
+   Then open web UI: http://0.0.0.0:8089
+
+   Or run headless:
+   ```bash
+   locust --headless --users 20 --spawn-rate 1 -H https://$LOAD_BALANCER_URL
+   ```
+4. Take note of the median and 95% percentile response times.
+5. Now let's increase replicas to 2:
+```bash
+kubectl apply -f - << END
+apiVersion: machinelearning.seldon.io/v1
+kind: SeldonDeployment
+metadata:
+  name: iris-model
+  namespace: my-models
+spec:
+  name: iris
+  predictors:
+  - componentSpecs:
+    - spec:
+        containers:
+        - name: classifier
+          env:
+          - name: GUNICORN_WORKERS
+            value: '5'
+          - name: GUNICORN_THREADS
+            value: '100'
+    graph:
+      implementation: SKLEARN_SERVER
+      modelUri: gs://seldon-models/v1.10.0-dev/sklearn/iris
+      name: classifier
+    name: default
+    replicas: 2
+END
+```
+6. Check deployment status. You should get `"state": "Available"`:
+    ```bash
+    kubectl get sdep iris-model -o json --namespace my-models | jq .status
+    ```
+7. Check locust to see the change in the median and 95% percentile response times. 
