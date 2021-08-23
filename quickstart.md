@@ -1,9 +1,9 @@
-# Quickstart on AWS
+# Quickstart
 
 This tutorial shows to run ML model serving at scale on AWS using Seldon Core.
 
-## Pre-Requisits
-### Kuberenetes cluster
+## Pre-Requisites
+### Kubernetes cluster
 To install Seldon Core you'll need a Kubernetes cluster version equal or higher than 1.12.
 
 Follow the latest [AWS EKS docs](https://docs.aws.amazon.com/eks/latest/userguide/create-cluster.html) to find the setup option that best suits your needs.
@@ -140,8 +140,10 @@ END
     Note: If you haven't set up a SSL certificate properly (which we won't in the scope of this tutorial), you will need to ignore SSL errors in your clients. For example in curl add `-k` argument.
 
 ## Scaling
-In this section I will show multiple ways to handle increasing scale.
-In order to measure the effect of scaling change we will run a load test using a pythonic tool called `locust`
+In this section I will show how to handle increasing scale by adding more replicas.
+In order to measure the effectiveness of the additional replicas, we will run a load test using tool called `locust`.
+
+### Installing and running locust
 1. Create and activate a virtual environment.
     
     For example using virtualenvwrapper:
@@ -164,7 +166,15 @@ In order to measure the effect of scaling change we will run a load test using a
    locust --headless --users 20 --spawn-rate 1 -H https://$LOAD_BALANCER_URL
    ```
 4. Take note of the median and 95% percentile response times.
-5. Now let's increase replicas to 2:
+
+### Adding replicas
+5. Now let's increase the number of replicas:
+   ```bash
+   kubectl scale sdep/iris-model -n my-models --replicas=4
+   ```
+   NOTE: As of the moment of writing this tutorial I couldn't get the above command to work.
+   
+   We can achieve the desired result by re-applying the SeldonDeployment with 2 replicas instead:  
 ```bash
 kubectl apply -f - << END
 apiVersion: machinelearning.seldon.io/v1
@@ -175,25 +185,20 @@ metadata:
 spec:
   name: iris
   predictors:
-  - componentSpecs:
-    - spec:
-        containers:
-        - name: classifier
-          env:
-          - name: GUNICORN_WORKERS
-            value: '5'
-          - name: GUNICORN_THREADS
-            value: '100'
-    graph:
+  - graph:
       implementation: SKLEARN_SERVER
       modelUri: gs://seldon-models/v1.10.0-dev/sklearn/iris
       name: classifier
     name: default
-    replicas: 2
+    replicas: 4
 END
 ```
-6. Check deployment status. You should get `"state": "Available"`:
+6. Check rollout status:
     ```bash
-    kubectl get sdep iris-model -o json --namespace my-models | jq .status
+    kubectl rollout status deploy/$(kubectl get deploy -l seldon-deployment-id=iris-model -n my-models -o jsonpath='{.items[0].metadata.name}') -n my-models
     ```
-7. Check locust to see the change in the median and 95% percentile response times. 
+7. Verify replicas count:
+   ```bash
+   kubectl get deploy -l seldon-deployment-id=iris-model -n my-models -o jsonpath='{.items[0].status.replicas}'
+   ```
+8. Finally, check locust to see the change in the median and 95% percentile response times.
