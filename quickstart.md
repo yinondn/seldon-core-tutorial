@@ -9,10 +9,10 @@ To install Seldon Core you'll need a Kubernetes cluster version equal or higher 
 Follow the latest [AWS EKS docs](https://docs.aws.amazon.com/eks/latest/userguide/create-cluster.html) to find the setup option that best suits your needs.
 
 Below is an example of how to create EKS cluster using `eksctl`:
-4. [Install AWS CLI version 2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
-6. [Configure the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
-1. [Install eksctl](https://docs.aws.amazon.com/eks/latest/userguide/eksctl.html)
-2. Run in terminal:
+1. [Install AWS CLI version 2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
+2. [Configure the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
+3. [Install eksctl](https://docs.aws.amazon.com/eks/latest/userguide/eksctl.html)
+4. Run in terminal:
     ```bash
     eksctl create cluster \
     --name eks-model-serving \
@@ -25,17 +25,17 @@ Below is an example of how to create EKS cluster using `eksctl`:
     --nodes-max 2 \
     --managed
     ```
-3. [Install kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
+5. [Install kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
     
     For example, to install on macOS using Homebrew:
     ```bash
     brew install kubectl
     ```
-7. Configure kubectl:
+6. Configure kubectl:
    ```bash
    aws eks --region us-east-2 update-kubeconfig --name eks-model-serving
    ```
-8. Verify kubectl is properly configured:
+7. Verify kubectl is properly configured:
    ```bash
    kubectl cluster-info
    ```
